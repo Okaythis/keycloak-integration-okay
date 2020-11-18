@@ -1,0 +1,2 @@
+org.keycloak.integration.okay.auth.push.OkayAuthenticatorFactory
+org.keycloak.integration.okay.auth.registration.VerifyRegistrationAuthenticationFactory
