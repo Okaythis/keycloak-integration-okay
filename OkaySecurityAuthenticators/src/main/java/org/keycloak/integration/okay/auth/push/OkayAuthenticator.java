@@ -2,19 +2,32 @@ package org.keycloak.integration.okay.auth.push;
 
 import org.jboss.logging.Logger;
 import org.keycloak.authentication.AuthenticationFlowContext;
+import org.keycloak.authentication.AuthenticationFlowError;
 import org.keycloak.authentication.Authenticator;
+import org.keycloak.authentication.CredentialValidator;
+import org.keycloak.credential.CredentialProvider;
+import org.keycloak.integration.okay.credential.SecretPinCredentialProvider;
+import org.keycloak.integration.okay.credential.SecretPinCredentialProviderFactory;
 import org.keycloak.integration.okay.rest.OkayUtilities;
 import org.keycloak.integration.okay.utils.FormUtilities;
 import org.keycloak.integration.okay.utils.OkayLoggingUtilities;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
+import org.keycloak.models.UserCredentialModel;
 import org.keycloak.models.UserModel;
 import org.keycloak.models.utils.FormMessage;
 
 import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.Response;
 
-public class OkayAuthenticator implements Authenticator {
+import static org.keycloak.integration.okay.rest.OkayUtilities.MINUS_ONE;
+import static org.keycloak.integration.okay.rest.OkayUtilities.OK;
+import static org.keycloak.integration.okay.rest.OkayUtilities.ONE_HUNDRED_ONE;
+import static org.keycloak.integration.okay.rest.OkayUtilities.PUSH_NOTIFICATION_PIN;
+import static org.keycloak.integration.okay.rest.OkayUtilities.USER_NOT_LINKED;
+import static org.keycloak.integration.okay.rest.OkayUtilities.ZERO;
+
+public class OkayAuthenticator implements Authenticator, CredentialValidator<SecretPinCredentialProvider> {
 
     public static final String PUSH_NOTIFICATION_LOGIN_TEMPLATE = "push-notification-login.ftl";
     public static final String PUSH_NOTIFICATION_LOGIN_RESEND_TEMPLATE = "push-notification-login-resend.ftl";
@@ -53,13 +66,25 @@ public class OkayAuthenticator implements Authenticator {
         String pushNotificationState = OkayUtilities.getPushNotificationVerification(context);
         OkayLoggingUtilities.print(logger, "pushNotificationState: "+ pushNotificationState);
 
-        if (AUTHENTICATE_PARAM.equals(action) &&
-                "0".equals(pushNotificationState)) {
+        if (AUTHENTICATE_PARAM.equals(action) && ZERO.equals(pushNotificationState)) {
+
+            String pin = context.getAuthenticationSession().getAuthNote(PUSH_NOTIFICATION_PIN);
+            OkayLoggingUtilities.print(logger, pin);
+            if (pin != null) {
+                boolean validated = validateAnswer(context, pin);
+                OkayLoggingUtilities.print(logger, String.valueOf(validated));
+                if (!validated) {
+                    context.challenge(FormUtilities.createErrorPage(context,
+                            new FormMessage(AuthenticationFlowError.INVALID_CREDENTIALS.toString())));
+                    return;
+                }
+            }
+
             context.success();
-        } else if (AUTHENTICATE_PARAM.equals(action) && "-1".equals(pushNotificationState)) {
+        } else if (AUTHENTICATE_PARAM.equals(action) && MINUS_ONE.equals(pushNotificationState)) {
             Response challenge = context.form().createForm(PUSH_NOTIFICATION_LOGIN_TEMPLATE);
             context.challenge(challenge);
-        } else if (AUTHENTICATE_PARAM.equals(action) && "101".equals(pushNotificationState)) {
+        } else if (AUTHENTICATE_PARAM.equals(action) && ONE_HUNDRED_ONE.equals(pushNotificationState)) {
             Response challenge = context
                     .form()
                     .addError(new FormMessage("pushNotificationFormExpiredError"))
@@ -76,15 +101,14 @@ public class OkayAuthenticator implements Authenticator {
         return true;
     }
 
-    public boolean configuredFor(KeycloakSession keycloakSession, RealmModel realmModel, UserModel userModel) {
+    public boolean configuredFor(KeycloakSession session, RealmModel realm, UserModel user) {
         // Hardcode to true for the time being
         // Only users with verify configured should use this authenticator
         return true;
     }
 
-    public void setRequiredActions(KeycloakSession keycloakSession, RealmModel realmModel, UserModel userModel) {
+    public void setRequiredActions(KeycloakSession session, RealmModel realm, UserModel user) {
         // No-op for the time being
-
     }
 
     public void close() {
@@ -96,18 +120,18 @@ public class OkayAuthenticator implements Authenticator {
         OkayLoggingUtilities.entry(logger, methodName, context);
 
         UserModel user = context.getUser();
+
         if (user != null) {
 
             String userId = user.getId();
             context.getAuthenticationSession().removeAuthNote(OkayUtilities.PUSH_NOTIFICATION_SESSION_ID);
             String response = OkayUtilities.auth(context,userId);
-            if (response.equals("UserNotLinked")) {
+            if (response.equals(USER_NOT_LINKED)) {
                 requireVerifyRegistration(context, methodName);
-            } else if (response.equals("OK")) {
+            } else if (response.equals(OK)) {
                 //OkayUtilities.auth(context, userId);
                 Response challenge = context.form().createForm(PUSH_NOTIFICATION_LOGIN_TEMPLATE);
                 context.challenge(challenge);
-
                 OkayLoggingUtilities.exit(logger, methodName);
             }
             return;
@@ -122,5 +146,19 @@ public class OkayAuthenticator implements Authenticator {
         context.form().addError(new FormMessage("verifyRegistrationRequired"));
         context.attempted();
         OkayLoggingUtilities.exit(logger, methodName);
+    }
+
+    @Override
+    public SecretPinCredentialProvider getCredentialProvider(KeycloakSession session) {
+        return (SecretPinCredentialProvider)session
+                .getProvider(CredentialProvider.class, SecretPinCredentialProviderFactory.PROVIDER_ID);
+    }
+
+    protected boolean validateAnswer(AuthenticationFlowContext context, String pin) {
+        String credentialId = getCredentialProvider(context.getSession())
+                    .getDefaultCredential(context.getSession(), context.getRealm(), context.getUser()).getId();
+
+        UserCredentialModel input = new UserCredentialModel(credentialId, getType(context.getSession()), pin);
+        return getCredentialProvider(context.getSession()).isValid(context.getRealm(), context.getUser(), input);
     }
 }

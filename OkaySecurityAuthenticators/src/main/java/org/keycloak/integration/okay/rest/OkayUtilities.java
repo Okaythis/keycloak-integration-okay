@@ -16,13 +16,23 @@ import java.util.regex.Pattern;
 
 public class OkayUtilities {
 
+    public static final String HASH = "SHA-256";
+
     public static final String PUSH_NOTIFICATION_AUTHENTICATOR_ID_ATTR_NAME = "push.notification.authenticator.id";
     public static final String PUSH_NOTIFICATION_SESSION_ID = "push.notification.session.id";
+    public static final String PUSH_NOTIFICATION_PIN = "push.notification.pin";
 
     public static final String CONFIG_CLIENT_TENANT_ID = "tenant.id";
     public static final String CONFIG_CLIENT_BASE_URL = "base.url";
     public static final String CONFIG_CLIENT_SECRET = "client.secret";
     public static final String CONFIG_CLIENT_AUTH = "client.auth";
+    public static final String AUTH_CLIENT_ID = "client.auth.id" ;
+
+    public static final String ZERO = "0";
+    public static final String MINUS_ONE = "-1";
+    public static final String ONE_HUNDRED_ONE = "101";
+    public static final String USER_NOT_LINKED = "UserNotLinked";
+    public static final String OK = "OK";
 
 
     private static final Logger logger = Logger.getLogger(OkayUtilities.class);
@@ -71,18 +81,20 @@ public class OkayUtilities {
         final String methodName = "getAuthType";
         OkayLoggingUtilities.entry(logger, methodName, context);
 
-        String baseUrl = null;
+        String auth = null;
         AuthenticatorConfigModel authenticatorConfigModel = context.getAuthenticatorConfig();
         if (authenticatorConfigModel != null) {
             Map<String, String> authenticatorConfig = authenticatorConfigModel.getConfig();
             if (authenticatorConfig != null) {
                 // Load tenant configuration
-                baseUrl = authenticatorConfig.get(OkayUtilities.CONFIG_CLIENT_AUTH);
+                auth = authenticatorConfig.get(OkayUtilities.CONFIG_CLIENT_AUTH);
             }
         }
 
-        OkayLoggingUtilities.exit(logger, methodName, baseUrl);
-        return baseUrl;
+        context.getAuthenticationSession().setUserSessionNote(AUTH_CLIENT_ID, auth);
+
+        OkayLoggingUtilities.exit(logger, methodName, auth);
+        return auth;
     }
 
     public static String getConfigClientSecret(AuthenticationFlowContext context) {
@@ -180,22 +192,20 @@ public class OkayUtilities {
 
         OkayLoggingUtilities.exit(logger, methodName);
 
-        OkayAuthType authType = OkayAuthType.valueOf(getAuthType(context));
+        String authTypeStr = getAuthType(context);
+
+        OkayAuthType authType = OkayAuthType.valueOf(authTypeStr);
 
         String response = okayRestClient.authUser(userId, authType, guiHeader, guiText);
 
         String sessionId = regexMatch(response, "\"sessionExternalId\":\\s*\"([^\"]+)\"");
 
         String returnCode =  regexMatch(response, "\"code\":\\s*([0-9\\-]+)");
-        if (returnCode.equals("0")) {
+        if (returnCode.equals(ZERO)) {
             context.getAuthenticationSession().setAuthNote(PUSH_NOTIFICATION_SESSION_ID, sessionId);
         }
 
-
-        String message = regexMatch(response,"\"message\":\\s*\"([^\"]+)\"");
-
-
-        return message;
+        return regexMatch(response,"\"message\":\\s*\"([^\"]+)\"");
     }
 
     public static String getPushNotificationVerification(AuthenticationFlowContext context) {
@@ -206,6 +216,16 @@ public class OkayUtilities {
         }
 
         String response = check(context, authenticatorId);
+
+        String auth = context.getAuthenticationSession().getUserSessionNotes().get(AUTH_CLIENT_ID);
+
+        if (auth.equals(OkayAuthType.AUTH_PIN.getName()) || auth.equals(OkayAuthType.AUTH_BIOMETRIC_OK.getName())) {
+            String returnDataType = regexMatch(response, "\"dataType\":\\s*([0-9\\-]+)");
+            if (returnDataType != null && returnDataType.equals("102")) {
+                String data =  regexMatch(response, "\"data\":\\s*\"([^\"]+)\"");
+                context.getAuthenticationSession().setAuthNote(PUSH_NOTIFICATION_PIN, data);
+            }
+        }
 
         return regexMatch(response, "\"code\":\\s*([0-9\\-]+)");
     }
@@ -229,7 +249,7 @@ public class OkayUtilities {
     public static String generateSignature(String input) {
         MessageDigest messageDigest;
         try {
-            messageDigest = MessageDigest.getInstance("SHA-256");
+            messageDigest = MessageDigest.getInstance(HASH);
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }

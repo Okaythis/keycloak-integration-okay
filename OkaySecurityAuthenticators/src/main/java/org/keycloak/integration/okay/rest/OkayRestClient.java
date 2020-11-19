@@ -14,7 +14,7 @@ import java.io.IOException;
 
 public class OkayRestClient {
 
-    private static Logger logger = Logger.getLogger(OkayRestClient.class);
+    private static final Logger logger = Logger.getLogger(OkayRestClient.class);
 
     private final String OKAY_URI;
     private final Long tenantId;
@@ -47,16 +47,6 @@ public class OkayRestClient {
                            final OkayAuthType type,
                            final String header,
                            final String text) {
-
-        final String methodName = "authUser";
-        OkayLoggingUtilities.print(logger, "user"+userExternalId);
-        OkayLoggingUtilities.print(logger, "header"+header);
-        OkayLoggingUtilities.print(logger, "text "+text);
-        OkayLoggingUtilities.print(logger, "type "+type);
-        OkayLoggingUtilities.print(logger, "header "+header);
-
-        OkayLoggingUtilities.print(logger, "tenant " +tenantId);
-        OkayLoggingUtilities.print(logger, "tenantS " +tenantSecretToken);
 
 
         String url = OKAY_URI + "/gateway/auth";

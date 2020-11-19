@@ -62,7 +62,7 @@ public class OkayAuthenticatorFactory implements AuthenticatorFactory {
     }
 
 
-    private Logger logger = Logger.getLogger(OkayAuthenticatorFactory.class);
+    private final Logger logger = Logger.getLogger(OkayAuthenticatorFactory.class);
 
     public String getDisplayType() {
         return "Okay Push Notification Login Authenticator";
