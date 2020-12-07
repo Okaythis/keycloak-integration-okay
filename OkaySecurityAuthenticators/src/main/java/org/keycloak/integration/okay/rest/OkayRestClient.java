@@ -10,7 +10,11 @@ import org.jboss.logging.Logger;
 import org.keycloak.integration.okay.model.OkayAuthType;
 import org.keycloak.integration.okay.utils.OkayLoggingUtilities;
 
+import javax.ws.rs.core.MediaType;
 import java.io.IOException;
+
+import static javax.ws.rs.core.HttpHeaders.ACCEPT;
+import static javax.ws.rs.core.HttpHeaders.CONTENT_TYPE;
 
 public class OkayRestClient {
 
@@ -99,8 +103,8 @@ public class OkayRestClient {
             StringEntity entity = new StringEntity(json);
             httpPost.setEntity(entity);
 
-            httpPost.setHeader("Accept", "application/json");
-            httpPost.setHeader("Content-type", "application/json");
+            httpPost.setHeader(ACCEPT, MediaType.APPLICATION_JSON);
+            httpPost.setHeader(CONTENT_TYPE, MediaType.APPLICATION_JSON);
             CloseableHttpResponse response = client.execute(httpPost);
             int statusCode = response.getStatusLine().getStatusCode();
             String responseBody = EntityUtils.toString(response.getEntity());

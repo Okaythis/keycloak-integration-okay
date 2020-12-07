@@ -20,12 +20,14 @@ import org.keycloak.models.utils.FormMessage;
 import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.Response;
 
+import static org.keycloak.integration.okay.rest.OkayUtilities.DO_NOT_ACCEPT;
 import static org.keycloak.integration.okay.rest.OkayUtilities.MINUS_ONE;
 import static org.keycloak.integration.okay.rest.OkayUtilities.OK;
 import static org.keycloak.integration.okay.rest.OkayUtilities.ONE_HUNDRED_ONE;
-import static org.keycloak.integration.okay.rest.OkayUtilities.PUSH_NOTIFICATION_PIN;
+import static org.keycloak.integration.okay.rest.OkayUtilities.PUSH_NOTIFICATION_RESULT;
 import static org.keycloak.integration.okay.rest.OkayUtilities.USER_NOT_LINKED;
 import static org.keycloak.integration.okay.rest.OkayUtilities.ZERO;
+import static org.keycloak.integration.okay.rest.OkayUtilities.isNumberValid;
 
 public class OkayAuthenticator implements Authenticator, CredentialValidator<SecretPinCredentialProvider> {
 
@@ -68,15 +70,25 @@ public class OkayAuthenticator implements Authenticator, CredentialValidator<Sec
 
         if (AUTHENTICATE_PARAM.equals(action) && ZERO.equals(pushNotificationState)) {
 
-            String pin = context.getAuthenticationSession().getAuthNote(PUSH_NOTIFICATION_PIN);
-            OkayLoggingUtilities.print(logger, pin);
-            if (pin != null) {
-                boolean validated = validateAnswer(context, pin);
-                OkayLoggingUtilities.print(logger, String.valueOf(validated));
-                if (!validated) {
-                    context.challenge(FormUtilities.createErrorPage(context,
-                            new FormMessage(AuthenticationFlowError.INVALID_CREDENTIALS.toString())));
+            String result = context.getAuthenticationSession().getAuthNote(PUSH_NOTIFICATION_RESULT);
+            OkayLoggingUtilities.print(logger, result);
+            if (result != null) {
+
+                if (result.equals(DO_NOT_ACCEPT)) {
+                    context.forceChallenge(FormUtilities
+                            .createErrorPage(context, new FormMessage("errorMsgAccessDenied")));
                     return;
+                }
+
+                boolean isNumeric = isNumberValid(result);
+                if (isNumeric) {
+                    boolean validated = validateAnswer(context, result);
+                    OkayLoggingUtilities.print(logger, String.valueOf(validated));
+                    if (!validated) {
+                        context.challenge(FormUtilities.createErrorPage(context,
+                                new FormMessage(AuthenticationFlowError.INVALID_CREDENTIALS.toString())));
+                        return;
+                    }
                 }
             }
 

@@ -24,14 +24,15 @@ import javax.ws.rs.core.Response;
 
 import static org.keycloak.integration.okay.auth.push.OkayAuthenticator.PUSH_NOTIFICATION_LOGIN_RESEND_TEMPLATE;
 import static org.keycloak.integration.okay.auth.push.OkayAuthenticator.PUSH_NOTIFICATION_LOGIN_TEMPLATE;
-import static org.keycloak.integration.okay.rest.OkayUtilities.AUTH_CLIENT_ID;
+import static org.keycloak.integration.okay.rest.OkayUtilities.DO_NOT_ACCEPT;
 import static org.keycloak.integration.okay.rest.OkayUtilities.MINUS_ONE;
 import static org.keycloak.integration.okay.rest.OkayUtilities.OK;
 import static org.keycloak.integration.okay.rest.OkayUtilities.ONE_HUNDRED_ONE;
-import static org.keycloak.integration.okay.rest.OkayUtilities.PUSH_NOTIFICATION_PIN;
+import static org.keycloak.integration.okay.rest.OkayUtilities.PUSH_NOTIFICATION_RESULT;
 import static org.keycloak.integration.okay.rest.OkayUtilities.USER_NOT_LINKED;
 import static org.keycloak.integration.okay.rest.OkayUtilities.ZERO;
 import static org.keycloak.integration.okay.rest.OkayUtilities.getAuthType;
+import static org.keycloak.integration.okay.rest.OkayUtilities.isNumberValid;
 
 public class VerifyRegistrationAuthenticator implements Authenticator, CredentialValidator<SecretPinCredentialProvider> {
 
@@ -61,18 +62,29 @@ public class VerifyRegistrationAuthenticator implements Authenticator, Credentia
         if (AUTHENTICATE_PARAM.equals(action)) {
 
             String pushNotificationState = OkayUtilities.getPushNotificationVerification(context);
-            OkayLoggingUtilities.print(logger, "pushNotificationState: " + pushNotificationState);
+            OkayLoggingUtilities.print(logger, "pushNotificationState REG: " + pushNotificationState);
 
             if (ZERO.equals(pushNotificationState)) {
-                String pin = context.getAuthenticationSession().getAuthNote(PUSH_NOTIFICATION_PIN);
-                OkayLoggingUtilities.print(logger, pin);
-                if (pin != null) {
-                    boolean validated = validateAnswer(context, pin);
-                    OkayLoggingUtilities.print(logger, String.valueOf(validated));
-                    if (!validated) {
-                        context.challenge(FormUtilities.createErrorPage(context,
-                                new FormMessage(AuthenticationFlowError.INVALID_CREDENTIALS.toString())));
+                String result = context.getAuthenticationSession().getAuthNote(PUSH_NOTIFICATION_RESULT);
+                OkayLoggingUtilities.print(logger, result);
+                if (result != null) {
+
+                    if (result.equals(DO_NOT_ACCEPT)) {
+                        context.forceChallenge(FormUtilities
+                                .createErrorPage(context, new FormMessage("errorMsgAccessDenied")));
                         return;
+                    }
+
+                    boolean isNumeric = isNumberValid(result);
+
+                    if (isNumeric) {
+                        boolean validated = validateAnswer(context, result);
+                        OkayLoggingUtilities.print(logger, String.valueOf(validated));
+                        if (!validated) {
+                            context.challenge(FormUtilities.createErrorPage(context,
+                                    new FormMessage(AuthenticationFlowError.INVALID_CREDENTIALS.toString())));
+                            return;
+                        }
                     }
                 }
                 context.success();
@@ -95,6 +107,15 @@ public class VerifyRegistrationAuthenticator implements Authenticator, Credentia
             initiateAndPoll(context);
         } else if (CHECKPIN_ACTION.equals(action)) {
             String answer = (context.getHttpRequest().getDecodedFormParameters().getFirst("secret_pin"));
+
+            boolean isValid = isNumberValid(answer);
+
+            if (!isValid) {
+                context
+                        .forceChallenge(FormUtilities
+                                .createErrorPage(context, new FormMessage("errorBadPIN")));
+            }
+
             SecretPinCredentialProvider provider = (SecretPinCredentialProvider) context.getSession()
                     .getProvider(CredentialProvider.class, "secret-pin");
             provider.createCredential(context.getRealm(), context.getUser(),
@@ -110,12 +131,14 @@ public class VerifyRegistrationAuthenticator implements Authenticator, Credentia
         OkayLoggingUtilities.entry(logger, methodName, context);
         initiateAndPoll(context);
         OkayLoggingUtilities.exit(logger, methodName);
-
     }
 
     private void initiateAndPoll(AuthenticationFlowContext context) {
         final String methodName = "initiateAndPoll";
         OkayLoggingUtilities.entry(logger, methodName, context);
+
+        OkayLoggingUtilities.print(logger,methodName);
+
         boolean flag = checkPin(context);
 
         if (!flag) {

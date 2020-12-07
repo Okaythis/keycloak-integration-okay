@@ -20,7 +20,7 @@ public class OkayUtilities {
 
     public static final String PUSH_NOTIFICATION_AUTHENTICATOR_ID_ATTR_NAME = "push.notification.authenticator.id";
     public static final String PUSH_NOTIFICATION_SESSION_ID = "push.notification.session.id";
-    public static final String PUSH_NOTIFICATION_PIN = "push.notification.pin";
+    public static final String PUSH_NOTIFICATION_RESULT = "push.notification.result";
 
     public static final String CONFIG_CLIENT_TENANT_ID = "tenant.id";
     public static final String CONFIG_CLIENT_BASE_URL = "base.url";
@@ -31,8 +31,26 @@ public class OkayUtilities {
     public static final String ZERO = "0";
     public static final String MINUS_ONE = "-1";
     public static final String ONE_HUNDRED_ONE = "101";
+    public static final String ONE_HUNDRED_TWO = "102";
     public static final String USER_NOT_LINKED = "UserNotLinked";
     public static final String OK = "OK";
+    public static final String CODE_REGEX = "\"code\":\\s*([0-9\\-]+)";
+    public static final String DATA_TYPE_REGEX = "\"dataType\":\\s*([0-9\\-]+)";
+    public static final String DATA_REGEX = "\"data\":\\s*\"([^\"]+)\"";
+    public static final String MESSAGE_REGEX = "\"message\":\\s*\"([^\"]+)\"";
+    public static final String QR_REGEX = "\"linkingQrImg\":\\s*\"([^\"]+)\"";
+    public static final String LINKING_CODE_REGEX = "\"linkingCode\":\\s*\"([^\"]+)\"";
+    public static final String SESSION_REGEX = "\"sessionExternalId\":\\s*\"([^\"]+)\"";
+    public static final String NUMBER_REGEX = "^\\d{4}$";
+    public static final String DO_NOT_ACCEPT = "NO";
+
+    public static final Pattern NUMBER_PATTERN = Pattern.compile(NUMBER_REGEX);
+    public static final Pattern MESSAGE_PATTERN = Pattern.compile(MESSAGE_REGEX);
+    public static final Pattern DATA_PATTERN = Pattern.compile(DATA_REGEX);
+    public static final Pattern QR_PATTERN = Pattern.compile(QR_REGEX);
+    public static final Pattern CODE_PATTERN = Pattern.compile(CODE_REGEX);
+    public static final Pattern LINKING_CODE_PATTERN = Pattern.compile(LINKING_CODE_REGEX);
+    public static final Pattern SESSION_PATTERN = Pattern.compile(SESSION_REGEX);
 
 
     private static final Logger logger = Logger.getLogger(OkayUtilities.class);
@@ -134,7 +152,7 @@ public class OkayUtilities {
     public static String tryLink(AuthenticationFlowContext context, String userId) {
         String response = linking(context,userId);
 
-        return regexMatch(response, "\"message\":\\s*\"([^\"]+)\"");
+        return regexMatch(response, MESSAGE_PATTERN);
     }
 
     public static String getVerifyRegistrationQrCode(AuthenticationFlowContext context) {
@@ -171,9 +189,9 @@ public class OkayUtilities {
     public static String getQrCode(AuthenticationFlowContext context, String userId) {
         String linkUserResponse = OkayUtilities.linking(context, userId);
 
-        String qrCode = regexMatch(linkUserResponse, "\"linkingQrImg\":\\s*\"([^\"]+)\"");
+        String qrCode = regexMatch(linkUserResponse, QR_PATTERN);
 
-        String linkingCode = regexMatch(linkUserResponse,"\"linkingCode\":\\s*\"([^\"]+)\"");
+        String linkingCode = regexMatch(linkUserResponse,LINKING_CODE_PATTERN);
 
         context.getAuthenticationSession().setUserSessionNote("verify.registration.qrNumber", linkingCode);
 
@@ -198,14 +216,15 @@ public class OkayUtilities {
 
         String response = okayRestClient.authUser(userId, authType, guiHeader, guiText);
 
-        String sessionId = regexMatch(response, "\"sessionExternalId\":\\s*\"([^\"]+)\"");
+        String sessionId = regexMatch(response, SESSION_PATTERN);
 
-        String returnCode =  regexMatch(response, "\"code\":\\s*([0-9\\-]+)");
+        String returnCode =  regexMatch(response, CODE_PATTERN);
+
         if (returnCode.equals(ZERO)) {
             context.getAuthenticationSession().setAuthNote(PUSH_NOTIFICATION_SESSION_ID, sessionId);
         }
 
-        return regexMatch(response,"\"message\":\\s*\"([^\"]+)\"");
+        return regexMatch(response,MESSAGE_PATTERN);
     }
 
     public static String getPushNotificationVerification(AuthenticationFlowContext context) {
@@ -217,17 +236,10 @@ public class OkayUtilities {
 
         String response = check(context, authenticatorId);
 
-        String auth = context.getAuthenticationSession().getUserSessionNotes().get(AUTH_CLIENT_ID);
+        String data = regexMatch(response, DATA_PATTERN);
+        context.getAuthenticationSession().setAuthNote(PUSH_NOTIFICATION_RESULT, data);
 
-        if (auth.equals(OkayAuthType.AUTH_PIN.getName()) || auth.equals(OkayAuthType.AUTH_BIOMETRIC_OK.getName())) {
-            String returnDataType = regexMatch(response, "\"dataType\":\\s*([0-9\\-]+)");
-            if (returnDataType != null && returnDataType.equals("102")) {
-                String data =  regexMatch(response, "\"data\":\\s*\"([^\"]+)\"");
-                context.getAuthenticationSession().setAuthNote(PUSH_NOTIFICATION_PIN, data);
-            }
-        }
-
-        return regexMatch(response, "\"code\":\\s*([0-9\\-]+)");
+        return regexMatch(response, CODE_PATTERN);
     }
 
 
@@ -257,13 +269,19 @@ public class OkayUtilities {
         return new String(Base64.getEncoder().encode(check), StandardCharsets.UTF_8);
     }
 
-    private static String regexMatch(String input, String regex) {
+    private static String regexMatch(String input, Pattern extraction) {
         String result = null;
-        Pattern extraction = Pattern.compile(regex);
         Matcher matcher = extraction.matcher(input);
         if (matcher.find()) {
             result = matcher.group(1);
         }
         return result;
+    }
+
+    public static boolean isNumberValid(String strNum) {
+        if (strNum == null) {
+            return false;
+        }
+        return NUMBER_PATTERN.matcher(strNum).matches();
     }
 }
