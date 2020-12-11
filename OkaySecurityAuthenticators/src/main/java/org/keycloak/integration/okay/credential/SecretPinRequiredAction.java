@@ -4,8 +4,6 @@ import org.keycloak.authentication.CredentialRegistrator;
 import org.keycloak.authentication.RequiredActionContext;
 import org.keycloak.authentication.RequiredActionProvider;
 import org.keycloak.credential.CredentialProvider;
-import org.keycloak.integration.okay.utils.FormUtilities;
-import org.keycloak.models.utils.FormMessage;
 
 import javax.ws.rs.core.Response;
 
@@ -36,7 +34,8 @@ public class SecretPinRequiredAction implements RequiredActionProvider, Credenti
             context.failure();
         }
 
-        SecretPinCredentialProvider sqcp = (SecretPinCredentialProvider) context.getSession().getProvider(CredentialProvider.class, "secret-question");
+        SecretPinCredentialProvider sqcp = (SecretPinCredentialProvider) context.getSession()
+                .getProvider(CredentialProvider.class, SecretPinCredentialProviderFactory.PROVIDER_ID);
         sqcp.createCredential(context.getRealm(), context.getUser(), SecretPinCredentialModel.createSecretPin(answer));
         context.success();
     }
