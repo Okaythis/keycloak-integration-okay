@@ -26,7 +26,7 @@ public class SecretPinRequiredAction implements RequiredActionProvider, Credenti
 
     @Override
     public void processAction(RequiredActionContext context) {
-        String answer = (context.getHttpRequest().getDecodedFormParameters().getFirst("secret_answer"));
+        String answer = (context.getHttpRequest().getDecodedFormParameters().getFirst("secret_pin"));
 
         boolean isValid = isNumberValid(answer);
 
